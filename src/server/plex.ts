@@ -73,6 +73,7 @@ export type PlexMediaItem = {
   year?: number;
   thumb?: string;
   art?: string;
+  parentThumb?: string;
   grandparentThumb?: string;
   summary?: string;
   contentRating?: string;
@@ -368,7 +369,9 @@ export async function getArtwork(ratingKey: string): Promise<{ data: Buffer; con
     `/library/metadata/${encodeURIComponent(ratingKey)}`
   );
   const item = result.MediaContainer?.Metadata?.[0];
-  const imagePath = item?.type === "episode" ? item.grandparentThumb ?? item.thumb : item?.thumb;
+  const imagePath = item?.type === "episode"
+    ? item.parentThumb ?? item.grandparentThumb ?? item.thumb
+    : item?.thumb;
   if (!imagePath) throw new Error("Artwork not found");
   const response = await fetch(`${connection.baseUrl}${imagePath}`, {
     headers: { "X-Plex-Token": connection.token },

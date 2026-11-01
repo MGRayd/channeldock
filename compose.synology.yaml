@@ -1,0 +1,14 @@
+services:
+  channeldock:
+    image: ghcr.io/mgrayd/channeldock:latest
+    pull_policy: always
+    container_name: channeldock
+    environment:
+      TZ: Europe/London
+      PORT: 4100
+      DATA_DIR: /data
+    ports:
+      - "8410:4100"
+    volumes:
+      - /volume1/docker/Configs/channeldock/data:/data
+    restart: unless-stopped

@@ -23,27 +23,36 @@ Open `http://YOUR-NAS-IP:8410`. Application data is stored in `./data` beside th
 
 For Synology Container Manager, create a project directory such as `/volume1/docker/channeldock`, place this repository there, and build the project using `compose.yaml`.
 
-### Synology installation from GitHub
+### Synology Container Manager
 
-Clone the repository into the directory used by the Container Manager project:
+GitHub Actions publishes the latest `main` branch as a multi-platform image at `ghcr.io/mgrayd/channeldock:latest`. Use `compose.synology.yaml` for the Container Manager project, or paste this configuration into its YAML editor:
 
-```bash
-cd /volume1/docker
-git clone https://github.com/MGRayd/channeldock.git
-cd channeldock
-mkdir -p data
-docker compose up --build -d
+```yaml
+services:
+  channeldock:
+    image: ghcr.io/mgrayd/channeldock:latest
+    pull_policy: always
+    container_name: channeldock
+    environment:
+      TZ: Europe/London
+      PORT: 4100
+      DATA_DIR: /data
+    ports:
+      - "8410:4100"
+    volumes:
+      - /volume1/docker/Configs/channeldock/data:/data
+    restart: unless-stopped
 ```
 
-To install later updates while retaining the database and Plex connection:
+Create `/volume1/docker/Configs/channeldock/data` before the first start. To update, rebuild the Container Manager project so it pulls the current `latest` image. The mounted data directory preserves the database and Plex connection.
+
+For a command-line update:
 
 ```bash
-cd /volume1/docker/channeldock
-git pull --ff-only
-docker compose up --build -d
+cd /volume1/docker/Configs/channeldock
+docker compose -f compose.synology.yaml pull
+docker compose -f compose.synology.yaml up -d
 ```
-
-The `data` directory is excluded from Git and remains mounted at `/data` when the container is rebuilt.
 
 ## Current scope
 

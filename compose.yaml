@@ -1,0 +1,15 @@
+services:
+  channeldock:
+    build: .
+    container_name: channeldock
+    environment:
+      TZ: Europe/London
+      PORT: 4100
+      DATA_DIR: /data
+      STREAM_MODE: auto
+      VIDEO_ENCODER: auto
+    ports:
+      - "8410:4100"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

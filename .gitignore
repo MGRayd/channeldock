@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/
+.env
+npm-debug.log*
+tv-app/.gradle/
+tv-app/local.properties
+tv-app/app/build/
+tv-app/build/
+tv-app/releases/*.apk

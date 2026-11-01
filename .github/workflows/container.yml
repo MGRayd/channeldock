@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - README.md
+      - compose.synology.yaml
   workflow_dispatch:
 
 permissions:

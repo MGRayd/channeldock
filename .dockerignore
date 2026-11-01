@@ -1,6 +1,7 @@
 node_modules
 dist
 data
+tv-app
 .git
 .env
 npm-debug.log*

@@ -48,6 +48,9 @@ export const getCollections = async (sectionId: string) =>
     )
   ).collections;
 
+export const getCollectionItems = async (collectionId: string) =>
+  (await api<{ items: PlexItem[] }>(`/api/plex/collections/${encodeURIComponent(collectionId)}/items`)).items;
+
 export const getLibraryItems = async (sectionId: string, filters: { genre?: string; label?: string; year?: string } = {}) => {
   const query = new URLSearchParams({ sectionId });
   if (filters.genre) query.set("genre", filters.genre);

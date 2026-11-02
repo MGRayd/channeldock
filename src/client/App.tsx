@@ -25,6 +25,7 @@ import {
   getChannel,
   getChannels,
   getChannelSchedules,
+  getCollectionItems,
   getCollections,
   getLibraryFilters,
   getLibraryItems,
@@ -136,6 +137,11 @@ export function App() {
     void getChannelSchedules().then(setSchedules).catch((error: Error) => setMessage(error.message));
   }
 
+  function channelQuickUpdated(channel: Channel) {
+    setChannels((current) => current.map((item) => item.id === channel.id ? channel : item).sort((a, b) => a.number - b.number));
+    void getChannelSchedules().then(setSchedules).catch((error: Error) => setMessage(error.message));
+  }
+
   if (loading) {
     return (
       <div className="boot-screen">
@@ -174,6 +180,7 @@ export function App() {
         {view === "library" ? (
           <SourceBrowser
             connected={status.connected}
+            channels={channels}
             libraries={libraries}
             collections={collections}
             items={plexItems}
@@ -183,6 +190,7 @@ export function App() {
             onGoToSettings={() => setView("settings")}
             onCancelEdit={() => { setEditingChannel(null); setView("channels"); }}
             onChannelUpdated={channelSaved}
+            onChannelQuickUpdated={channelQuickUpdated}
             onChannelCreated={(channel) => {
               setChannels((current) => [...current, channel].sort((a, b) => a.number - b.number));
               setView("channels");
@@ -307,10 +315,10 @@ function PlexSettings({ status, onConnected }: { status: PlexStatus; onConnected
   );
 }
 
-function SourceBrowser({ connected, libraries, collections, items, selectedLibrary, editingChannel, onSelectLibrary, onGoToSettings, onChannelCreated, onChannelUpdated, onCancelEdit }: {
-  connected: boolean; libraries: PlexLibrary[]; collections: PlexCollection[]; items: PlexItem[]; selectedLibrary: PlexLibrary | null;
+function SourceBrowser({ connected, channels, libraries, collections, items, selectedLibrary, editingChannel, onSelectLibrary, onGoToSettings, onChannelCreated, onChannelUpdated, onChannelQuickUpdated, onCancelEdit }: {
+  connected: boolean; channels: Channel[]; libraries: PlexLibrary[]; collections: PlexCollection[]; items: PlexItem[]; selectedLibrary: PlexLibrary | null;
   editingChannel: ChannelDetails | null; onSelectLibrary: (library: PlexLibrary) => void; onGoToSettings: () => void; onChannelCreated: (channel: Channel) => void;
-  onChannelUpdated: (channel: Channel) => void; onCancelEdit: () => void;
+  onChannelUpdated: (channel: Channel) => void; onChannelQuickUpdated: (channel: Channel) => void; onCancelEdit: () => void;
 }) {
   const [sourceMode, setSourceMode] = useState<"titles" | "collections">("titles");
   const [selected, setSelected] = useState<Map<string, PlexItem>>(
@@ -348,15 +356,19 @@ function SourceBrowser({ connected, libraries, collections, items, selectedLibra
         <div className="library-rail"><p className="section-label">Libraries</p>{libraries.map((library) => <button key={library.key} className={selectedLibrary?.key === library.key ? "selected" : ""} onClick={() => { setSourceMode("titles"); onSelectLibrary(library); }}>{library.type === "show" ? <Tv size={17} /> : <Film size={17} />}<span>{library.title}</span><ArrowRight size={15} /></button>)}<div className="selection-tally" aria-live="polite"><p className="section-label">Selected for channel</p><strong>{chosen.length} {chosen.length === 1 ? "title" : "titles"}</strong><span><Tv size={14} />{showCount} {showCount === 1 ? "show" : "shows"}</span><span className="tally-detail">{episodeCount.toLocaleString()} {episodeCount === 1 ? "episode" : "episodes"}</span><span><Film size={14} />{filmCount} {filmCount === 1 ? "film" : "films"}</span></div></div>
         <div className="collection-area">
           {!selectedLibrary ? <EmptyState icon={<Library />} title="Select a library" text="Its Plex collections will appear here." /> : null}
-          {selectedLibrary ? <><div className="source-tabs" role="tablist" aria-label="Channel source"><button role="tab" aria-selected={sourceMode === "titles"} className={sourceMode === "titles" ? "active" : ""} onClick={() => setSourceMode("titles")}>Choose titles</button><button role="tab" aria-selected={sourceMode === "collections"} className={sourceMode === "collections" ? "active" : ""} disabled={Boolean(editingChannel)} onClick={() => setSourceMode("collections")}>Collections <span>{collections.length}</span></button></div>{sourceMode === "titles" ? <SelectionBuilder library={selectedLibrary} items={items} selected={selected} setSelected={setSelected} editingChannel={editingChannel} onCreated={onChannelCreated} onUpdated={onChannelUpdated} onCancelEdit={onCancelEdit} /> : null}{sourceMode === "collections" && collections.length === 0 ? <EmptyState icon={<Clapperboard />} title="No collections" text="This Plex library has no collections." /> : null}{sourceMode === "collections" && collections.length > 0 ? <div className="collection-grid">{collections.map((collection) => <CollectionCard key={collection.ratingKey} collection={collection} library={selectedLibrary} onCreated={onChannelCreated} />)}</div> : null}</> : null}
+          {selectedLibrary ? <><div className="source-tabs" role="tablist" aria-label="Channel source"><button role="tab" aria-selected={sourceMode === "titles"} className={sourceMode === "titles" ? "active" : ""} onClick={() => setSourceMode("titles")}>Choose titles</button><button role="tab" aria-selected={sourceMode === "collections"} className={sourceMode === "collections" ? "active" : ""} disabled={Boolean(editingChannel)} onClick={() => setSourceMode("collections")}>Collections <span>{collections.length}</span></button></div>{sourceMode === "titles" ? <SelectionBuilder library={selectedLibrary} items={items} selected={selected} setSelected={setSelected} editingChannel={editingChannel} onCreated={onChannelCreated} onUpdated={onChannelUpdated} onCancelEdit={onCancelEdit} /> : null}{sourceMode === "collections" && collections.length === 0 ? <EmptyState icon={<Clapperboard />} title="No collections" text="This Plex library has no collections." /> : null}{sourceMode === "collections" && collections.length > 0 ? <div className="collection-grid">{collections.map((collection) => <CollectionCard key={collection.ratingKey} collection={collection} library={selectedLibrary} channels={channels} selected={selected} setSelected={setSelected} onCreated={onChannelCreated} onUpdated={onChannelQuickUpdated} />)}</div> : null}</> : null}
         </div>
       </div>
     </section>
   );
 }
 
-function CollectionCard({ collection, library, onCreated }: { collection: PlexCollection; library: PlexLibrary; onCreated: (channel: Channel) => void }) {
+function CollectionCard({ collection, library, channels, selected, setSelected, onCreated, onUpdated }: { collection: PlexCollection; library: PlexLibrary; channels: Channel[]; selected: Map<string, PlexItem>; setSelected: Dispatch<SetStateAction<Map<string, PlexItem>>>; onCreated: (channel: Channel) => void; onUpdated: (channel: Channel) => void }) {
   const [creating, setCreating] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [target, setTarget] = useState("draft");
+  const [working, setWorking] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const [name, setName] = useState(collection.title);
   const [number, setNumber] = useState(100);
   const [order, setOrder] = useState<"shuffle" | "sequential">("shuffle");
@@ -370,11 +382,57 @@ function CollectionCard({ collection, library, onCreated }: { collection: PlexCo
     } catch (caught) { setError((caught as Error).message); }
   }
 
+  async function addToChannel() {
+    setWorking(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      const members = await getCollectionItems(collection.ratingKey);
+      if (target === "draft") {
+        const added = members.filter((item) => !selected.has(item.ratingKey)).length;
+        setSelected((current) => {
+          const next = new Map(current);
+          for (const item of members) {
+            next.set(item.ratingKey, item);
+          }
+          return next;
+        });
+        setFeedback(`${added} ${added === 1 ? "title" : "titles"} added to the current draft`);
+      } else {
+        const details = await getChannel(Number(target));
+        const merged = new Map(details.items.map((item) => [item.ratingKey, item as PlexItem]));
+        for (const item of members) merged.set(item.ratingKey, item);
+        const mergedItems = Array.from(merged.values());
+        const saved = await updateChannel(details.id, {
+          name: details.name,
+          number: details.number,
+          sourceType: "plex-selection",
+          sourceId: "selection",
+          sourceTitle: `${mergedItems.length} selected titles`,
+          libraryId: details.libraryId,
+          libraryTitle: details.libraryTitle,
+          playbackOrder: details.playbackOrder,
+          logoRatingKey: details.logoRatingKey,
+          isActive: details.isActive,
+          items: mergedItems.map(({ ratingKey, title, type, leafCount }) => ({ ratingKey, title, type, leafCount: leafCount ?? null }))
+        });
+        onUpdated(saved);
+        setFeedback(`${collection.title} added to ${details.name}`);
+      }
+    } catch (caught) {
+      setError((caught as Error).message);
+    } finally {
+      setWorking(false);
+    }
+  }
+
   return (
     <article className="collection-card">
-      <div className="poster-placeholder"><Clapperboard size={24} /><span>{collection.childCount ?? "•"}</span></div>
+      <div className="poster-placeholder">{collection.thumb ? <img src={`/artwork/${collection.ratingKey}`} alt="" loading="lazy" /> : null}<Clapperboard size={24} /><span>{collection.childCount ?? "•"}</span></div>
       <div className="collection-copy"><h3>{collection.title}</h3><p>{collection.summary || `${collection.subtype ?? collection.type} collection`}</p></div>
-      {!creating ? <button className="text-button" onClick={() => setCreating(true)}><Plus size={16} />Make channel</button> : <div className="quick-create"><label>Channel name<input value={name} onChange={(event) => setName(event.target.value)} /></label><div className="field-row"><label>Number<input type="number" min="1" max="9999" value={number} onChange={(event) => setNumber(Number(event.target.value))} /></label><label>Order<select value={order} onChange={(event) => setOrder(event.target.value as typeof order)}><option value="shuffle">Shuffle</option><option value="sequential">Mixed, episodes in order</option></select></label></div>{error ? <p className="form-error">{error}</p> : null}<div className="button-row"><button className="ghost-button" onClick={() => setCreating(false)}>Cancel</button><button className="primary-button compact" onClick={save}>Create</button></div></div>}
+      {!creating && !adding ? <div className="collection-actions"><button className="text-button" onClick={() => setCreating(true)}><Plus size={16} />Make channel</button><button className="collection-add-button" onClick={() => setAdding(true)}>Add to channel</button></div> : null}
+      {creating ? <div className="quick-create"><label>Channel name<input value={name} onChange={(event) => setName(event.target.value)} /></label><div className="field-row"><label>Number<input type="number" min="1" max="9999" value={number} onChange={(event) => setNumber(Number(event.target.value))} /></label><label>Order<select value={order} onChange={(event) => setOrder(event.target.value as typeof order)}><option value="shuffle">Shuffle</option><option value="sequential">Mixed, episodes in order</option></select></label></div>{error ? <p className="form-error">{error}</p> : null}<div className="button-row"><button className="ghost-button" onClick={() => setCreating(false)}>Cancel</button><button className="primary-button compact" onClick={save}>Create</button></div></div> : null}
+      {adding ? <div className="quick-add"><label>Add to<select value={target} onChange={(event) => setTarget(event.target.value)}><option value="draft">Current channel draft ({selected.size} selected)</option>{channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.number} · {channel.name}</option>)}</select></label>{error ? <p className="form-error">{error}</p> : null}{feedback ? <p className="collection-feedback">{feedback}</p> : null}<div className="button-row"><button className="ghost-button" onClick={() => { setAdding(false); setFeedback(null); }}>Close</button><button className="primary-button compact" disabled={working} onClick={() => void addToChannel()}>{working ? "Adding…" : "Add"}</button></div></div> : null}
     </article>
   );
 }

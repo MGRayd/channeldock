@@ -39,6 +39,7 @@ export type PlexCollection = {
   type: string;
   subtype?: string;
   childCount?: number;
+  thumb?: string;
   summary?: string;
 };
 

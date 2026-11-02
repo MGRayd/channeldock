@@ -126,8 +126,8 @@ app.get("/api/plex/collections", async (request) => {
 });
 
 app.get("/api/plex/items", async (request) => {
-  const query = z.object({ sectionId: z.string().min(1), genre: z.string().optional(), label: z.string().optional() }).parse(request.query);
-  return { items: await getLibraryItems(query.sectionId, { genre: query.genre, label: query.label }) };
+  const query = z.object({ sectionId: z.string().min(1), genre: z.string().optional(), label: z.string().optional(), year: z.string().optional() }).parse(request.query);
+  return { items: await getLibraryItems(query.sectionId, { genre: query.genre, label: query.label, year: query.year }) };
 });
 
 app.get("/api/plex/filters", async (request) => {

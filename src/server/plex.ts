@@ -296,16 +296,17 @@ export async function getCollectionMembers(collectionId: string): Promise<PlexMe
     .filter((item) => item.type === "movie" || item.type === "show");
 }
 
-export async function getLibraryItems(sectionId: string, filters: { genre?: string; label?: string } = {}): Promise<PlexMediaItem[]> {
+export async function getLibraryItems(sectionId: string, filters: { genre?: string; label?: string; year?: string } = {}): Promise<PlexMediaItem[]> {
   const query = new URLSearchParams();
   if (filters.genre) query.set("genre", filters.genre);
   if (filters.label) query.set("label", filters.label);
+  if (filters.year) query.set("year", filters.year);
   const suffix = query.size ? `?${query}` : "";
   return (await getMetadataItems(`/library/sections/${encodeURIComponent(sectionId)}/all${suffix}`))
     .filter((item) => item.type === "movie" || item.type === "show");
 }
 
-async function getSectionFilterValues(sectionId: string, filter: "genre" | "label"): Promise<PlexFilterValue[]> {
+async function getSectionFilterValues(sectionId: string, filter: "genre" | "label" | "year"): Promise<PlexFilterValue[]> {
   const connection = configuredConnection();
   const result = await request<PlexContainer<{ Directory?: Array<{ key?: string; fastKey?: string; title: string }> }>>(
     connection.baseUrl,
@@ -320,12 +321,13 @@ async function getSectionFilterValues(sectionId: string, filter: "genre" | "labe
   });
 }
 
-export async function getLibraryFilters(sectionId: string): Promise<{ genres: PlexFilterValue[]; labels: PlexFilterValue[] }> {
-  const [genres, labels] = await Promise.all([
+export async function getLibraryFilters(sectionId: string): Promise<{ genres: PlexFilterValue[]; labels: PlexFilterValue[]; years: PlexFilterValue[] }> {
+  const [genres, labels, years] = await Promise.all([
     getSectionFilterValues(sectionId, "genre"),
-    getSectionFilterValues(sectionId, "label")
+    getSectionFilterValues(sectionId, "label"),
+    getSectionFilterValues(sectionId, "year")
   ]);
-  return { genres, labels };
+  return { genres, labels, years: years.sort((a, b) => Number(b.title) - Number(a.title)) };
 }
 
 export async function getSelectedItems(ratingKeys: string[]): Promise<PlexMediaItem[]> {

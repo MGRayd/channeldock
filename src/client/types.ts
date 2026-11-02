@@ -60,6 +60,7 @@ export type PlexFilterValue = {
 export type PlexLibraryFilters = {
   genres: PlexFilterValue[];
   labels: PlexFilterValue[];
+  years: PlexFilterValue[];
 };
 
 export type Channel = {

@@ -41,12 +41,32 @@ function stableHash(value: string): number {
 function orderItems(channel: Channel, items: PlexMediaItem[]): PlexMediaItem[] {
   if (channel.playbackOrder === "sequential") {
     if (items.every((item) => item.type === "movie")) return items;
-    return [...items].sort((a, b) => {
-      const series = (a.grandparentTitle ?? a.title).localeCompare(b.grandparentTitle ?? b.title);
-      if (series !== 0) return series;
+
+    const groups = new Map<string, PlexMediaItem[]>();
+    for (const item of items) {
+      const key = item.type === "episode"
+        ? `show:${item.grandparentRatingKey ?? item.grandparentTitle ?? item.ratingKey}`
+        : `item:${item.ratingKey}`;
+      const group = groups.get(key);
+      if (group) group.push(item);
+      else groups.set(key, [item]);
+    }
+
+    const orderedGroups = [...groups.values()].map((group) => [...group].sort((a, b) => {
       const season = (a.parentIndex ?? 0) - (b.parentIndex ?? 0);
-      return season !== 0 ? season : (a.index ?? 0) - (b.index ?? 0);
-    });
+      if (season !== 0) return season;
+      const episode = (a.index ?? 0) - (b.index ?? 0);
+      return episode !== 0 ? episode : a.ratingKey.localeCompare(b.ratingKey);
+    }));
+
+    const interleaved: PlexMediaItem[] = [];
+    const longestGroup = Math.max(...orderedGroups.map((group) => group.length));
+    for (let index = 0; index < longestGroup; index += 1) {
+      for (const group of orderedGroups) {
+        if (group[index]) interleaved.push(group[index]);
+      }
+    }
+    return interleaved;
   }
   return [...items].sort(
     (a, b) => stableHash(`${channel.id}:${a.ratingKey}`) - stableHash(`${channel.id}:${b.ratingKey}`)

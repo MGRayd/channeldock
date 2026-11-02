@@ -18,7 +18,7 @@ export type Channel = {
   createdAt: string;
 };
 
-export type ChannelItem = { ratingKey: string; title: string; type: string };
+export type ChannelItem = { ratingKey: string; title: string; type: string; leafCount: number | null };
 
 const dataDirectory = process.env.DATA_DIR ?? join(process.cwd(), "data");
 mkdirSync(dataDirectory, { recursive: true });
@@ -53,6 +53,7 @@ database.exec(`
     rating_key TEXT NOT NULL,
     title TEXT NOT NULL,
     type TEXT NOT NULL,
+    leaf_count INTEGER,
     PRIMARY KEY (channel_id, rating_key),
     FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
   );
@@ -67,6 +68,10 @@ if (!channelColumns.some((column) => column.name === "custom_logo_path")) {
 }
 if (!channelColumns.some((column) => column.name === "is_active")) {
   database.exec("ALTER TABLE channels ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1");
+}
+const channelItemColumns = database.prepare("PRAGMA table_info(channel_items)").all() as Array<{ name: string }>;
+if (!channelItemColumns.some((column) => column.name === "leaf_count")) {
+  database.exec("ALTER TABLE channel_items ADD COLUMN leaf_count INTEGER");
 }
 
 const channelSelect = `SELECT id, name, number, source_type AS sourceType, source_id AS sourceId,
@@ -111,7 +116,7 @@ export function getChannelByNumber(number: number): Channel | undefined {
 }
 
 export function getChannelItems(channelId: number): ChannelItem[] {
-  return database.prepare("SELECT rating_key AS ratingKey, title, type FROM channel_items WHERE channel_id = ? ORDER BY rowid").all(channelId) as ChannelItem[];
+  return database.prepare("SELECT rating_key AS ratingKey, title, type, leaf_count AS leafCount FROM channel_items WHERE channel_id = ? ORDER BY rowid").all(channelId) as ChannelItem[];
 }
 
 type ChannelWrite = Omit<Channel, "id" | "createdAt" | "customLogoPath">;
@@ -122,8 +127,8 @@ export function createChannel(input: ChannelWrite, items: ChannelItem[] = []): C
       (name, number, source_type, source_id, source_title, library_id, library_title, playback_order, logo_rating_key, is_active)
       VALUES (@name, @number, @sourceType, @sourceId, @sourceTitle, @libraryId, @libraryTitle, @playbackOrder, @logoRatingKey, @isActive)`).run({ ...input, isActive: input.isActive ? 1 : 0 });
     const channelId = Number(result.lastInsertRowid);
-    const insertItem = database.prepare("INSERT INTO channel_items (channel_id, rating_key, title, type) VALUES (?, ?, ?, ?)");
-    for (const item of items) insertItem.run(channelId, item.ratingKey, item.title, item.type);
+    const insertItem = database.prepare("INSERT INTO channel_items (channel_id, rating_key, title, type, leaf_count) VALUES (?, ?, ?, ?, ?)");
+    for (const item of items) insertItem.run(channelId, item.ratingKey, item.title, item.type, item.leafCount);
     return mapChannel(database.prepare(`${channelSelect} WHERE id = ?`).get(channelId) as ChannelRow);
   })();
 }
@@ -137,8 +142,8 @@ export function updateChannel(id: number, input: ChannelWrite, items: ChannelIte
       WHERE id = @id`).run({ id, ...input, isActive: input.isActive ? 1 : 0 });
     if (result.changes === 0) return undefined;
     database.prepare("DELETE FROM channel_items WHERE channel_id = ?").run(id);
-    const insertItem = database.prepare("INSERT INTO channel_items (channel_id, rating_key, title, type) VALUES (?, ?, ?, ?)");
-    for (const item of items) insertItem.run(id, item.ratingKey, item.title, item.type);
+    const insertItem = database.prepare("INSERT INTO channel_items (channel_id, rating_key, title, type, leaf_count) VALUES (?, ?, ?, ?, ?)");
+    for (const item of items) insertItem.run(id, item.ratingKey, item.title, item.type, item.leafCount);
     return mapChannel(database.prepare(`${channelSelect} WHERE id = ?`).get(id) as ChannelRow);
   })();
 }

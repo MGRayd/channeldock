@@ -82,6 +82,7 @@ export type PlexMediaItem = {
   grandparentRatingKey?: string;
   parentIndex?: number;
   index?: number;
+  leafCount?: number;
   Media?: Array<{
     videoCodec?: string;
     audioCodec?: string;

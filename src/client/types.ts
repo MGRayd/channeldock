@@ -46,6 +46,7 @@ export type PlexItem = {
   ratingKey: string;
   title: string;
   type: "movie" | "show";
+  leafCount?: number | null;
   year?: number;
   thumb?: string;
   summary?: string;
@@ -76,8 +77,8 @@ export type Channel = {
   isActive: boolean;
 };
 
-export type ChannelDraft = Omit<Channel, "id" | "hasCustomLogo"> & { items?: Array<Pick<PlexItem, "ratingKey" | "title" | "type">> };
-export type ChannelDetails = Channel & { items: Array<Pick<PlexItem, "ratingKey" | "title" | "type">> };
+export type ChannelDraft = Omit<Channel, "id" | "hasCustomLogo"> & { items?: Array<Pick<PlexItem, "ratingKey" | "title" | "type" | "leafCount">> };
+export type ChannelDetails = Channel & { items: Array<Pick<PlexItem, "ratingKey" | "title" | "type" | "leafCount">> };
 
 export type ScheduledProgramme = {
   ratingKey: string;

@@ -54,7 +54,12 @@ const channelSchema = z.object({
   playbackOrder: z.enum(["shuffle", "sequential"]),
   logoRatingKey: z.string().min(1).nullable().default(null),
   isActive: z.boolean().default(true),
-  items: z.array(z.object({ ratingKey: z.string().min(1), title: z.string().min(1), type: z.enum(["movie", "show"]) })).max(5000).default([])
+  items: z.array(z.object({
+    ratingKey: z.string().min(1),
+    title: z.string().min(1),
+    type: z.enum(["movie", "show"]),
+    leafCount: z.number().int().nonnegative().nullable().default(null)
+  })).max(5000).default([])
 }).superRefine((value, context) => {
   if (value.sourceType === "plex-selection" && value.items.length === 0) {
     context.addIssue({ code: "custom", message: "Select at least one movie or show", path: ["items"] });
@@ -137,7 +142,7 @@ app.get("/api/channels/:channelId", async (request, reply) => {
   if (!channel) return reply.status(404).send({ error: "Channel not found" });
   let items = getChannelItems(channel.id);
   if (items.length === 0 && channel.sourceType === "plex-collection") {
-    items = (await getCollectionMembers(channel.sourceId)).map(({ ratingKey, title, type }) => ({ ratingKey, title, type }));
+    items = (await getCollectionMembers(channel.sourceId)).map(({ ratingKey, title, type, leafCount }) => ({ ratingKey, title, type, leafCount: leafCount ?? null }));
   }
   return { channel: { ...publicChannel(channel), items } };
 });

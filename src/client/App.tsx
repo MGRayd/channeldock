@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
   Antenna,
   ArrowRight,
@@ -312,18 +312,42 @@ function SourceBrowser({ connected, libraries, collections, items, selectedLibra
   onChannelUpdated: (channel: Channel) => void; onCancelEdit: () => void;
 }) {
   const [sourceMode, setSourceMode] = useState<"titles" | "collections">("titles");
+  const [selected, setSelected] = useState<Map<string, PlexItem>>(
+    () => new Map(editingChannel?.items.map((item) => [item.ratingKey, item as PlexItem]) ?? [])
+  );
+  const chosen = Array.from(selected.values());
+  const showCount = chosen.filter((item) => item.type === "show").length;
+  const filmCount = chosen.filter((item) => item.type === "movie").length;
+  const episodeCount = chosen.reduce((total, item) => total + (item.type === "show" ? item.leafCount ?? 0 : 0), 0);
+
   useEffect(() => {
     if (editingChannel) setSourceMode("titles");
   }, [editingChannel]);
+  useEffect(() => {
+    if (items.length === 0) return;
+    setSelected((current) => {
+      const next = new Map(current);
+      let changed = false;
+      for (const item of items) {
+        if (!current.has(item.ratingKey)) continue;
+        const existing = current.get(item.ratingKey)!;
+        if (existing.leafCount !== item.leafCount) {
+          next.set(item.ratingKey, item);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [items]);
   if (!connected) return <EmptyState icon={<Server />} title="Connect Plex first" text="A Plex connection is needed before sources can be browsed." action="Open settings" onAction={onGoToSettings} />;
   return (
     <section>
       <PageHeading eyebrow="Plex catalogue" title="Build the lineup" description="Use a collection or assemble a channel from individual movies and complete shows." />
       <div className="source-layout">
-        <div className="library-rail"><p className="section-label">Libraries</p>{libraries.map((library) => <button key={library.key} disabled={Boolean(editingChannel && library.key !== editingChannel.libraryId)} className={selectedLibrary?.key === library.key ? "selected" : ""} onClick={() => { setSourceMode("titles"); onSelectLibrary(library); }}>{library.type === "show" ? <Tv size={17} /> : <Film size={17} />}<span>{library.title}</span><ArrowRight size={15} /></button>)}</div>
+        <div className="library-rail"><p className="section-label">Libraries</p>{libraries.map((library) => <button key={library.key} className={selectedLibrary?.key === library.key ? "selected" : ""} onClick={() => { setSourceMode("titles"); onSelectLibrary(library); }}>{library.type === "show" ? <Tv size={17} /> : <Film size={17} />}<span>{library.title}</span><ArrowRight size={15} /></button>)}<div className="selection-tally" aria-live="polite"><p className="section-label">Selected for channel</p><strong>{chosen.length} {chosen.length === 1 ? "title" : "titles"}</strong><span><Tv size={14} />{showCount} {showCount === 1 ? "show" : "shows"}</span><span className="tally-detail">{episodeCount.toLocaleString()} {episodeCount === 1 ? "episode" : "episodes"}</span><span><Film size={14} />{filmCount} {filmCount === 1 ? "film" : "films"}</span></div></div>
         <div className="collection-area">
           {!selectedLibrary ? <EmptyState icon={<Library />} title="Select a library" text="Its Plex collections will appear here." /> : null}
-          {selectedLibrary ? <><div className="source-tabs" role="tablist" aria-label="Channel source"><button role="tab" aria-selected={sourceMode === "titles"} className={sourceMode === "titles" ? "active" : ""} onClick={() => setSourceMode("titles")}>Choose titles</button><button role="tab" aria-selected={sourceMode === "collections"} className={sourceMode === "collections" ? "active" : ""} disabled={Boolean(editingChannel)} onClick={() => setSourceMode("collections")}>Collections <span>{collections.length}</span></button></div>{sourceMode === "titles" ? <SelectionBuilder key={`${selectedLibrary.key}-${editingChannel?.id ?? "new"}`} library={selectedLibrary} items={items} editingChannel={editingChannel} onCreated={onChannelCreated} onUpdated={onChannelUpdated} onCancelEdit={onCancelEdit} /> : null}{sourceMode === "collections" && collections.length === 0 ? <EmptyState icon={<Clapperboard />} title="No collections" text="This Plex library has no collections." /> : null}{sourceMode === "collections" && collections.length > 0 ? <div className="collection-grid">{collections.map((collection) => <CollectionCard key={collection.ratingKey} collection={collection} library={selectedLibrary} onCreated={onChannelCreated} />)}</div> : null}</> : null}
+          {selectedLibrary ? <><div className="source-tabs" role="tablist" aria-label="Channel source"><button role="tab" aria-selected={sourceMode === "titles"} className={sourceMode === "titles" ? "active" : ""} onClick={() => setSourceMode("titles")}>Choose titles</button><button role="tab" aria-selected={sourceMode === "collections"} className={sourceMode === "collections" ? "active" : ""} disabled={Boolean(editingChannel)} onClick={() => setSourceMode("collections")}>Collections <span>{collections.length}</span></button></div>{sourceMode === "titles" ? <SelectionBuilder library={selectedLibrary} items={items} selected={selected} setSelected={setSelected} editingChannel={editingChannel} onCreated={onChannelCreated} onUpdated={onChannelUpdated} onCancelEdit={onCancelEdit} /> : null}{sourceMode === "collections" && collections.length === 0 ? <EmptyState icon={<Clapperboard />} title="No collections" text="This Plex library has no collections." /> : null}{sourceMode === "collections" && collections.length > 0 ? <div className="collection-grid">{collections.map((collection) => <CollectionCard key={collection.ratingKey} collection={collection} library={selectedLibrary} onCreated={onChannelCreated} />)}</div> : null}</> : null}
         </div>
       </div>
     </section>
@@ -354,8 +378,7 @@ function CollectionCard({ collection, library, onCreated }: { collection: PlexCo
   );
 }
 
-function SelectionBuilder({ library, items, editingChannel, onCreated, onUpdated, onCancelEdit }: { library: PlexLibrary; items: PlexItem[]; editingChannel: ChannelDetails | null; onCreated: (channel: Channel) => void; onUpdated: (channel: Channel) => void; onCancelEdit: () => void }) {
-  const [selected, setSelected] = useState<Map<string, PlexItem>>(() => new Map(editingChannel?.items.map((item) => [item.ratingKey, item as PlexItem]) ?? []));
+function SelectionBuilder({ library, items, selected, setSelected, editingChannel, onCreated, onUpdated, onCancelEdit }: { library: PlexLibrary; items: PlexItem[]; selected: Map<string, PlexItem>; setSelected: Dispatch<SetStateAction<Map<string, PlexItem>>>; editingChannel: ChannelDetails | null; onCreated: (channel: Channel) => void; onUpdated: (channel: Channel) => void; onCancelEdit: () => void }) {
   const [name, setName] = useState(editingChannel?.name ?? `${library.title} Channel`);
   const [number, setNumber] = useState(editingChannel?.number ?? 100);
   const [order, setOrder] = useState<"shuffle" | "sequential">(editingChannel?.playbackOrder ?? "shuffle");
@@ -378,6 +401,12 @@ function SelectionBuilder({ library, items, editingChannel, onCreated, onUpdated
     setFilteredItems(items);
     setVisibleCount(200);
   }, [items]);
+
+  useEffect(() => {
+    setQuery("");
+    setGenre("");
+    setLabel("");
+  }, [library.key]);
 
   useEffect(() => {
     getLibraryFilters(library.key).then(setFilters).catch((caught: Error) => setError(caught.message));
@@ -413,7 +442,7 @@ function SelectionBuilder({ library, items, editingChannel, onCreated, onUpdated
       if (chosen.length === 0) throw new Error("Select at least one movie or show");
       if ((!editingChannel || number !== editingChannel.number) && !await isChannelNumberAvailable(number)) throw new Error("That channel number is already in use");
       const selectedLogo = chosen.some((item) => item.ratingKey === logoRatingKey) ? logoRatingKey : chosen[0]?.ratingKey ?? null;
-      const draft = { name, number, playbackOrder: order, sourceType: editingChannel?.sourceType ?? "plex-selection" as const, sourceId: editingChannel?.sourceId ?? "selection", sourceTitle: editingChannel?.sourceTitle ?? `${chosen.length} selected titles`, libraryId: library.key, libraryTitle: library.title, logoRatingKey: selectedLogo, isActive, items: chosen.map(({ ratingKey, title, type }) => ({ ratingKey, title, type })) };
+      const draft = { name, number, playbackOrder: order, sourceType: editingChannel?.sourceType ?? "plex-selection" as const, sourceId: editingChannel?.sourceId ?? "selection", sourceTitle: editingChannel?.sourceTitle ?? `${chosen.length} selected titles`, libraryId: library.key, libraryTitle: library.title, logoRatingKey: selectedLogo, isActive, items: chosen.map(({ ratingKey, title, type, leafCount }) => ({ ratingKey, title, type, leafCount: leafCount ?? null })) };
       let saved = editingChannel ? await updateChannel(editingChannel.id, draft) : await createChannel(draft);
       if (logoFile) saved = await uploadChannelLogo(saved.id, logoFile);
       if (editingChannel) onUpdated(saved); else onCreated(saved);

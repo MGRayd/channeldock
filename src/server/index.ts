@@ -247,6 +247,26 @@ app.get("/api/tv/channels", async (request) => {
   return { channels: channels.filter(Boolean) };
 });
 
+app.get("/api/tv/guide", async (request) => {
+  const query = z.object({ hours: z.coerce.number().min(1).max(24).default(24) }).parse(request.query);
+  const origin = requestOrigin(request);
+  const channels = listChannels().filter((channel) => channel.isActive);
+  const now = Date.now();
+  const schedules = await Promise.all(
+    channels.map((channel) => buildChannelSchedule(channel, now, query.hours * 60 * 60 * 1000))
+  );
+  return {
+    channels: channels.map((channel, index) => ({
+      channel: {
+        ...publicChannel(channel),
+        logoUrl: channel.customLogoPath ? `${origin}/channel-logo/${channel.id}` : channel.logoRatingKey ? `${origin}/artwork/${encodeURIComponent(channel.logoRatingKey)}` : null
+      },
+      current: schedules[index].programmes[0] ?? null
+    })),
+    schedules
+  };
+});
+
 app.get("/api/tv/channels/:channelId/now", async (request, reply) => {
   const params = z.object({ channelId: z.coerce.number().int().positive() }).parse(request.params);
   const playback = await tvPlayback(params.channelId, requestOrigin(request));

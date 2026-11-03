@@ -1,8 +1,10 @@
-import { getChannelItems, type Channel } from "./db.js";
+import { getChannelItems, getScheduleItemCache, setScheduleItemCache, type Channel, type ChannelItem } from "./db.js";
 import { getCollectionItems, getSelectedItems, type PlexMediaItem } from "./plex.js";
 
 const FALLBACK_DURATION_MS = 30 * 60 * 1000;
 const DEFAULT_HORIZON_MS = 2 * 60 * 60 * 1000;
+const SOURCE_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const sourceRefreshes = new Map<number, Promise<PlexMediaItem[]>>();
 
 export type ScheduledProgramme = {
   ratingKey: string;
@@ -83,15 +85,57 @@ function itemDuration(item: PlexMediaItem): number {
   return item.duration && item.duration > 0 ? item.duration : FALLBACK_DURATION_MS;
 }
 
+function sourceFingerprint(channel: Channel, savedItems: ChannelItem[]): string {
+  return JSON.stringify([
+    channel.sourceType,
+    channel.sourceId,
+    savedItems.map((item) => item.ratingKey)
+  ]);
+}
+
+async function fetchSourceItems(channel: Channel, savedItems: ChannelItem[]): Promise<PlexMediaItem[]> {
+  return savedItems.length > 0
+    ? getSelectedItems(savedItems.map((item) => item.ratingKey))
+    : channel.sourceType === "plex-selection" ? [] : getCollectionItems(channel.sourceId);
+}
+
+function refreshSourceItems(channel: Channel, savedItems: ChannelItem[], fingerprint: string): Promise<PlexMediaItem[]> {
+  const existing = sourceRefreshes.get(channel.id);
+  if (existing) return existing;
+  const refresh = fetchSourceItems(channel, savedItems).then((items) => {
+    setScheduleItemCache(channel.id, fingerprint, JSON.stringify(items));
+    return items;
+  }).finally(() => sourceRefreshes.delete(channel.id));
+  sourceRefreshes.set(channel.id, refresh);
+  return refresh;
+}
+
+async function getSourceItems(channel: Channel): Promise<PlexMediaItem[]> {
+  const savedItems = getChannelItems(channel.id);
+  const fingerprint = sourceFingerprint(channel, savedItems);
+  const cached = getScheduleItemCache(channel.id);
+  if (cached?.fingerprint === fingerprint) {
+    try {
+      const items = JSON.parse(cached.itemsJson) as PlexMediaItem[];
+      if (Date.now() - cached.refreshedAt > SOURCE_CACHE_MAX_AGE_MS) {
+        void refreshSourceItems(channel, savedItems, fingerprint).catch((error) => {
+          console.error(`Could not refresh schedule cache for channel ${channel.id}`, error);
+        });
+      }
+      return items;
+    } catch {
+      // A damaged cache is replaced by a fresh Plex response below.
+    }
+  }
+  return refreshSourceItems(channel, savedItems, fingerprint);
+}
+
 export async function buildChannelSchedule(
   channel: Channel,
   now = Date.now(),
   horizonMs = DEFAULT_HORIZON_MS
 ): Promise<ChannelSchedule> {
-  const savedItems = getChannelItems(channel.id);
-  const sourceItems = savedItems.length > 0
-    ? await getSelectedItems(savedItems.map((item) => item.ratingKey))
-    : channel.sourceType === "plex-selection" ? [] : await getCollectionItems(channel.sourceId);
+  const sourceItems = await getSourceItems(channel);
   const items = orderItems(channel, sourceItems);
   if (!channel.isActive) {
     return { channelId: channel.id, generatedAt: new Date(now).toISOString(), itemCount: items.length, programmes: [] };

@@ -57,6 +57,13 @@ database.exec(`
     PRIMARY KEY (channel_id, rating_key),
     FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS schedule_item_cache (
+    channel_id INTEGER PRIMARY KEY,
+    fingerprint TEXT NOT NULL,
+    items_json TEXT NOT NULL,
+    refreshed_at INTEGER NOT NULL
+  );
 `);
 
 const channelColumns = database.prepare("PRAGMA table_info(channels)").all() as Array<{ name: string }>;
@@ -119,6 +126,29 @@ export function getChannelItems(channelId: number): ChannelItem[] {
   return database.prepare("SELECT rating_key AS ratingKey, title, type, leaf_count AS leafCount FROM channel_items WHERE channel_id = ? ORDER BY rowid").all(channelId) as ChannelItem[];
 }
 
+export type ScheduleItemCache = {
+  fingerprint: string;
+  itemsJson: string;
+  refreshedAt: number;
+};
+
+export function getScheduleItemCache(channelId: number): ScheduleItemCache | undefined {
+  return database.prepare(`SELECT fingerprint, items_json AS itemsJson, refreshed_at AS refreshedAt
+    FROM schedule_item_cache WHERE channel_id = ?`).get(channelId) as ScheduleItemCache | undefined;
+}
+
+export function setScheduleItemCache(channelId: number, fingerprint: string, itemsJson: string): void {
+  database.prepare(`INSERT INTO schedule_item_cache (channel_id, fingerprint, items_json, refreshed_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(channel_id) DO UPDATE SET fingerprint = excluded.fingerprint,
+      items_json = excluded.items_json, refreshed_at = excluded.refreshed_at`)
+    .run(channelId, fingerprint, itemsJson, Date.now());
+}
+
+export function deleteScheduleItemCache(channelId: number): void {
+  database.prepare("DELETE FROM schedule_item_cache WHERE channel_id = ?").run(channelId);
+}
+
 type ChannelWrite = Omit<Channel, "id" | "createdAt" | "customLogoPath">;
 
 export function createChannel(input: ChannelWrite, items: ChannelItem[] = []): Channel {
@@ -160,6 +190,7 @@ export function setChannelActive(id: number, active: boolean): Channel | undefin
 
 export function deleteChannel(id: number): boolean {
   return database.transaction(() => {
+    deleteScheduleItemCache(id);
     database.prepare("DELETE FROM channel_items WHERE channel_id = ?").run(id);
     return database.prepare("DELETE FROM channels WHERE id = ?").run(id).changes > 0;
   })();
